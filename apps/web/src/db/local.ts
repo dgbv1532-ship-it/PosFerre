@@ -101,6 +101,70 @@ export async function searchProductsLocal(
     .toArray();
 }
 
+export async function listCategoriesLocal(storeId: string): Promise<Category[]> {
+  if (!storeId) return [];
+
+  const rows = await localDB.categories.where('storeId').equals(storeId).toArray();
+  return rows
+    .filter((category) => isUuid(category.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function listProductsLocal(params: {
+  storeId: string;
+  search?: string;
+  categoryId?: string;
+  lowStock?: boolean;
+  page?: number;
+  limit?: number;
+}): Promise<{ data: Product[]; total: number; page: number; limit: number }> {
+  const {
+    storeId,
+    search,
+    categoryId,
+    lowStock = false,
+    page = 1,
+    limit = 50,
+  } = params;
+
+  if (!storeId) {
+    return { data: [], total: 0, page, limit };
+  }
+
+  const query = search?.trim().toLowerCase() ?? '';
+
+  const allRows = await localDB.products.where('storeId').equals(storeId).toArray();
+  const filtered = allRows.filter((product) => {
+    if (!isUuid(product.id)) return false;
+    if (!product.active) return false;
+
+    if (categoryId && product.categoryId !== categoryId) return false;
+
+    if (query) {
+      const matchesName = product.name.toLowerCase().includes(query);
+      const matchesBarcode = product.barcode?.includes(query) ?? false;
+      if (!matchesName && !matchesBarcode) return false;
+    }
+
+    if (lowStock && Number(product.stock) > Number(product.minStock)) return false;
+
+    return true;
+  });
+
+  filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+  const total = filtered.length;
+  const start = Math.max(0, (page - 1) * limit);
+  const end = start + limit;
+
+  return {
+    data: filtered.slice(start, end),
+    total,
+    page,
+    limit,
+  };
+}
+
 export async function getProductByBarcode(
   barcode: string,
   storeId: string,

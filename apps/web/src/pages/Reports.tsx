@@ -244,7 +244,11 @@ export function ReportsPage() {
                 </div>
               )}
             </div>
-          ) : null
+          ) : (
+            <div className="card p-4 text-sm text-gray-600">
+              No hay datos de reportes disponibles sin conexion.
+            </div>
+          )
         )}
 
         {tab === 'stock' && (

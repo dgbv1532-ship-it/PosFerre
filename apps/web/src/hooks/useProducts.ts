@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getApiError } from '@/lib/api';
 import { useOffline } from './useOffline';
-import { searchProductsLocal } from '@/db/local';
+import { listCategoriesLocal, listProductsLocal, searchProductsLocal } from '@/db/local';
 import { useAuthStore } from '@/store/auth';
 import type { Product, Category } from '@pos/shared';
 import { useState, useEffect } from 'react';
@@ -12,12 +12,27 @@ import toast from 'react-hot-toast';
 // ============================================
 
 export function useCategories() {
+  const { isOnline } = useOffline();
+  const storeId = useAuthStore((state) => state.user?.storeId ?? '');
+
   return useQuery<Category[]>({
     queryKey: ['categories'],
     queryFn: async () => {
-      const res = await api.get('/categories');
-      return res.data.data;
+      if (!isOnline) {
+        return listCategoriesLocal(storeId);
+      }
+
+      try {
+        const res = await api.get('/categories');
+        return res.data.data;
+      } catch (error) {
+        if (!navigator.onLine) {
+          return listCategoriesLocal(storeId);
+        }
+        throw error;
+      }
     },
+    enabled: Boolean(storeId),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -33,12 +48,41 @@ export function useProducts(params?: {
   page?: number;
   limit?: number;
 }) {
+  const { isOnline } = useOffline();
+  const storeId = useAuthStore((state) => state.user?.storeId ?? '');
+
   return useQuery({
     queryKey: ['products', params],
     queryFn: async () => {
-      const res = await api.get('/products', { params });
-      return res.data as { data: Product[]; total: number; page: number; limit: number };
+      if (!isOnline) {
+        return listProductsLocal({
+          storeId,
+          search: params?.search,
+          categoryId: params?.categoryId,
+          lowStock: params?.lowStock,
+          page: params?.page,
+          limit: params?.limit,
+        });
+      }
+
+      try {
+        const res = await api.get('/products', { params });
+        return res.data as { data: Product[]; total: number; page: number; limit: number };
+      } catch (error) {
+        if (!navigator.onLine) {
+          return listProductsLocal({
+            storeId,
+            search: params?.search,
+            categoryId: params?.categoryId,
+            lowStock: params?.lowStock,
+            page: params?.page,
+            limit: params?.limit,
+          });
+        }
+        throw error;
+      }
     },
+    enabled: Boolean(storeId),
     staleTime: 1000 * 60 * 2,
   });
 }
