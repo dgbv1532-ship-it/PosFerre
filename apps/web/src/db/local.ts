@@ -47,15 +47,37 @@ export class LocalDB extends Dexie {
 
 export const localDB = new LocalDB();
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 // ============================================
 // Local DB operations
 // ============================================
 
 export async function upsertProducts(products: Product[]) {
+  const storeIds = [...new Set(products.map((p) => p.storeId))];
+  for (const storeId of storeIds) {
+    await localDB.products
+      .where('storeId')
+      .equals(storeId)
+      .filter((p) => !isUuid(p.id))
+      .delete();
+  }
   await localDB.products.bulkPut(products);
 }
 
 export async function upsertCategories(categories: Category[]) {
+  const storeIds = [...new Set(categories.map((c) => c.storeId))];
+  for (const storeId of storeIds) {
+    await localDB.categories
+      .where('storeId')
+      .equals(storeId)
+      .filter((c) => !isUuid(c.id))
+      .delete();
+  }
   await localDB.categories.bulkPut(categories);
 }
 
@@ -70,6 +92,7 @@ export async function searchProductsLocal(
     .equals(storeId)
     .filter(
       (p) =>
+        isUuid(p.id) &&
         p.active &&
         (p.name.toLowerCase().includes(query) ||
           (p.barcode?.includes(query) ?? false)),
@@ -82,10 +105,12 @@ export async function getProductByBarcode(
   barcode: string,
   storeId: string,
 ): Promise<Product | undefined> {
-  return localDB.products
+  const rows = await localDB.products
     .where('[storeId+barcode]')
     .equals([storeId, barcode])
-    .first();
+    .toArray();
+
+  return rows.find((p) => isUuid(p.id)) ?? rows[0];
 }
 
 // ============================================
