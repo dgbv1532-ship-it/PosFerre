@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Stores (Tenants)
+// ============================================
+
+model Store {
+  id          String    @id @default(uuid())
+  name        String
+  plan        StorePlan @default(basic)
+  trialEndsAt DateTime?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  users         User[]
+  categories    Category[]
+  products      Product[]
+  customers     Customer[]
+  cashRegisters CashRegister[]
+  sales         Sale[]
+
+  @@map("stores")
+}
+
+enum StorePlan {
+  basic
+  pro
+  multi
+}
+
+// ============================================
+// Users
+// ============================================
+
+model User {
+  id           String   @id @default(uuid())
+  storeId      String   @map("store_id")
+  email        String
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole @default(cashier)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cashRegisters CashRegister[]
+  sales         Sale[]
+  refreshTokens RefreshToken[]
+
+  @@unique([storeId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  admin
+  cashier
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// Inventory
+// ============================================
+
+model Category {
+  id        String   @id @default(uuid())
+  storeId   String   @map("store_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([storeId, name])
+  @@map("categories")
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  storeId    String   @map("store_id")
+  categoryId String?  @map("category_id")
+  name       String
+  barcode    String?
+  price      Decimal  @db.Decimal(10, 2)
+  cost       Decimal  @default(0) @db.Decimal(10, 2)
+  stock      Decimal  @default(0) @db.Decimal(10, 3)
+  minStock   Decimal  @default(5) @map("min_stock") @db.Decimal(10, 3)
+  unit       String   @default("unidad")
+  imageUrl   String?  @map("image_url")
+  active     Boolean  @default(true)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  saleItems SaleItem[]
+
+  @@unique([storeId, barcode])
+  @@index([storeId, active])
+  @@index([storeId, name])
+  @@map("products")
+}
+
+// ============================================
+// Customers
+// ============================================
+
+model Customer {
+  id        String   @id @default(uuid())
+  storeId   String   @map("store_id")
+  name      String
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales Sale[]
+
+  @@map("customers")
+}
+
+// ============================================
+// Cash Register
+// ============================================
+
+model CashRegister {
+  id             String    @id @default(uuid())
+  storeId        String    @map("store_id")
+  userId         String    @map("user_id")
+  openedAt       DateTime  @default(now()) @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  openingAmount  Decimal   @map("opening_amount") @db.Decimal(10, 2)
+  closingAmount  Decimal?  @map("closing_amount") @db.Decimal(10, 2)
+  expectedClosingAmount Decimal? @map("expected_closing_amount") @db.Decimal(10, 2)
+  closingDifference Decimal? @map("closing_difference") @db.Decimal(10, 2)
+  notes          String?
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id])
+  cashMovements CashMovement[]
+  sales         Sale[]
+
+  @@map("cash_registers")
+}
+
+model CashMovement {
+  id          String              @id @default(uuid())
+  registerId  String              @map("register_id")
+  type        CashMovementType
+  amount      Decimal             @db.Decimal(10, 2)
+  description String
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+
+  @@map("cash_movements")
+}
+
+enum CashMovementType {
+  in
+  out
+}
+
+// ============================================
+// Sales
+// ============================================
+
+model Sale {
+  id            String        @id @default(uuid())
+  storeId       String        @map("store_id")
+  registerId    String?       @map("register_id")
+  userId        String        @map("user_id")
+  customerId    String?       @map("customer_id")
+  total         Decimal       @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @map("payment_method")
+  status        SaleStatus    @default(completed)
+  syncedAt      DateTime?     @map("synced_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  store    Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  register CashRegister? @relation(fields: [registerId], references: [id])
+  user     User          @relation(fields: [userId], references: [id])
+  customer Customer?     @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String  @map("sale_id")
+  productId String  @map("product_id")
+  quantity  Decimal @db.Decimal(10, 3)
+  price     Decimal @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+enum PaymentMethod {
+  cash
+  card
+  transfer
+}
+
+enum SaleStatus {
+  completed
+  cancelled
+}
