@@ -31,6 +31,8 @@ const PAYMENT_METHODS = [
   { value: 'transfer' as const, label: 'Transfer', icon: ArrowLeftRight },
 ];
 
+const PY_DENOMINATIONS = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+
 export function POSPage() {
   const user = useAuthStore((state) => state.user);
   const [search, setSearch] = useState('');
@@ -476,11 +478,7 @@ function CheckoutModal({
     }
   }, [customerId]);
 
-  const quickAmounts = [
-    total,
-    Math.ceil(total / 5000) * 5000,
-    Math.ceil(total / 10000) * 10000,
-  ].filter((value, index, arr) => arr.indexOf(value) === index);
+  const quickAmounts = [...new Set([total, ...PY_DENOMINATIONS])].sort((a, b) => a - b);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedCustomerLabel = selectedCustomer?.name ?? selectedCustomerName;
   const normalizedCustomerSearch = customerSearch.trim().toLowerCase();
@@ -661,12 +659,12 @@ function CheckoutModal({
               placeholder={String(total)}
               autoFocus
             />
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {quickAmounts.map((amount) => (
                 <button
                   key={amount}
                   onClick={() => onSetAmountPaid(amount)}
-                  className="flex-1 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
+                  className="py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
                 >
                   {formatCurrency(amount)}
                 </button>
