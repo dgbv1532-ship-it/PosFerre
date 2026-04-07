@@ -49,7 +49,8 @@ export function useInstallPrompt() {
   }, [deferredPrompt]);
 
   return {
-    canInstall: !!deferredPrompt && !isInstalled,
+    canInstall: !isInstalled,
+    isPromptReady: !!deferredPrompt,
     isInstalled,
     install,
   };

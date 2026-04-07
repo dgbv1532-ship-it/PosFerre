@@ -19,6 +19,7 @@ import { useOffline } from '@/hooks/useOffline';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import toast from 'react-hot-toast';
 
 interface LayoutProps {
   children: ReactNode;
@@ -38,7 +39,7 @@ const navItems = [
 export function Layout({ children }: LayoutProps) {
   const { user, refreshToken, logout } = useAuthStore();
   const { isOnline } = useOffline();
-  const { canInstall, install } = useInstallPrompt();
+  const { canInstall, isPromptReady, install } = useInstallPrompt();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -53,6 +54,16 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const visibleNav = navItems.filter((item) => !item.adminOnly || user?.role === 'admin');
+
+  const handleInstall = async () => {
+    const installed = await install();
+    if (installed) return;
+
+    toast('Si no aparece el popup, usa el menu del navegador y elige "Instalar app".', {
+      duration: 4500,
+      icon: '⬇️',
+    });
+  };
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -102,11 +113,11 @@ export function Layout({ children }: LayoutProps) {
 
           {canInstall ? (
             <button
-              onClick={() => void install()}
+              onClick={() => void handleInstall()}
               className="w-full flex items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
             >
               <Download size={12} />
-              Instalar app
+              {isPromptReady ? 'Instalar app' : 'Como instalar app'}
             </button>
           ) : null}
 
@@ -132,11 +143,11 @@ export function Layout({ children }: LayoutProps) {
         <nav className="md:hidden bg-white border-t border-gray-200 safe-bottom">
           {canInstall ? (
             <button
-              onClick={() => void install()}
+              onClick={() => void handleInstall()}
               className="w-full flex items-center justify-center gap-2 border-b border-gray-100 py-2 text-xs font-medium text-blue-700 bg-blue-50"
             >
               <Download size={12} />
-              Instalar app
+              {isPromptReady ? 'Instalar app' : 'Como instalar app'}
             </button>
           ) : null}
           <div className="flex">
