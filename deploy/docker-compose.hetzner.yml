@@ -1,0 +1,64 @@
+services:
+  posferre-db:
+    image: postgres:16-alpine
+    container_name: posferre-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ}
+    volumes:
+      - posferre_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - posferre-net
+
+  posferre-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    container_name: posferre-api
+    restart: unless-stopped
+    depends_on:
+      posferre-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@posferre-db:5432/${POSTGRES_DB}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      NODE_ENV: production
+      PORT: 3001
+      TZ: ${TZ}
+    ports:
+      - "127.0.0.1:3180:3001"
+    networks:
+      - posferre-net
+
+  posferre-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: posferre-web
+    restart: unless-stopped
+    depends_on:
+      - posferre-api
+    ports:
+      - "127.0.0.1:5180:80"
+    networks:
+      - posferre-net
+
+volumes:
+  posferre_db_data:
+
+networks:
+  posferre-net:
+    driver: bridge

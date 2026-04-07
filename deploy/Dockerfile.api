@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+RUN corepack enable
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/shared/package.json packages/shared/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY apps/api apps/api
+COPY packages/shared packages/shared
+
+ENV NODE_ENV=production
+EXPOSE 3001
+
+CMD ["sh", "-c", "pnpm --filter api db:generate && pnpm --filter api db:migrate:prod && pnpm --filter api exec tsx src/server.ts"]
