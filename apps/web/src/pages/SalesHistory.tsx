@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FileText, Printer, RotateCcw, Search } from 'lucide-react';
+import { Printer, RotateCcw, Search } from 'lucide-react';
 import { useCancelSale, useSales } from '@/hooks/useSales';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';

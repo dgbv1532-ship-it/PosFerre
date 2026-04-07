@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma';
 import {
   loginSchema,
@@ -71,17 +72,33 @@ export async function authRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = loginSchema.parse(request.body);
 
-      const user = await prisma.user.findFirst({
+      const candidates = await prisma.user.findMany({
         where: { email: body.email, active: true },
         include: { store: true },
       });
 
-      if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
+      const matchingUsers: typeof candidates = [];
+      for (const candidate of candidates) {
+        if (await bcrypt.compare(body.password, candidate.passwordHash)) {
+          matchingUsers.push(candidate);
+        }
+      }
+
+      if (matchingUsers.length === 0) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'Credenciales invalidas',
         });
       }
+
+      if (matchingUsers.length > 1) {
+        return reply.code(409).send({
+          error: 'Conflict',
+          message: 'Credenciales ambiguas. Contacta soporte para seleccionar tienda.',
+        });
+      }
+
+      const user = matchingUsers[0];
 
       const tokens = await generateTokens(
         fastify,
@@ -109,9 +126,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/refresh
   fastify.post('/refresh', async (request, reply) => {
     const { refreshToken } = refreshTokenSchema.parse(request.body);
+    const refreshTokenHash = hashRefreshToken(refreshToken);
 
     const stored = await prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
+      where: { token: refreshTokenHash },
       include: { user: true },
     });
 
@@ -150,7 +168,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate] },
     async (request, reply) => {
       const { refreshToken } = refreshTokenSchema.parse(request.body);
-      await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+      await prisma.refreshToken.deleteMany({ where: { token: hashRefreshToken(refreshToken) } });
       return reply.send({ data: { success: true } });
     },
   );
@@ -193,13 +211,14 @@ async function generateTokens(
 ) {
   const accessToken = fastify.jwt.sign({ userId, storeId, role });
 
-  const refreshTokenValue = require('crypto').randomBytes(64).toString('hex');
+  const refreshTokenValue = crypto.randomBytes(64).toString('hex');
+  const refreshTokenHash = hashRefreshToken(refreshTokenValue);
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
   await prisma.refreshToken.create({
     data: {
       userId,
-      token: refreshTokenValue,
+      token: refreshTokenHash,
       expiresAt,
     },
   });
@@ -216,4 +235,16 @@ async function generateTokens(
     accessToken,
     refreshToken: refreshTokenValue,
   };
+}
+
+function hashRefreshToken(refreshToken: string): string {
+  const refreshSecret = process.env.JWT_REFRESH_SECRET;
+  if (!refreshSecret) {
+    throw new Error('JWT_REFRESH_SECRET is required');
+  }
+
+  return crypto
+    .createHash('sha256')
+    .update(`${refreshToken}.${refreshSecret}`)
+    .digest('hex');
 }

@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Product, Category, Sale, CashRegister } from '@pos/shared';
+import type { Product, Category, CashRegister } from '@pos/shared';
 
 // Offline sync queue item
 export interface SyncQueueEntry {

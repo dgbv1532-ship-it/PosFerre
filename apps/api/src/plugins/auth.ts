@@ -25,8 +25,13 @@ declare module 'fastify' {
 }
 
 async function authPlugin(fastify: FastifyInstance) {
+  const accessSecret = process.env.JWT_ACCESS_SECRET;
+  if (!accessSecret) {
+    throw new Error('JWT_ACCESS_SECRET is required');
+  }
+
   await fastify.register(jwt, {
-    secret: process.env.JWT_ACCESS_SECRET || 'fallback_secret_change_me',
+    secret: accessSecret,
     sign: {
       expiresIn: '15m',
     },

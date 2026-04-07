@@ -76,6 +76,32 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model SyncEvent {
+  id         String        @id @default(uuid())
+  storeId    String        @map("store_id")
+  deviceId   String        @map("device_id")
+  localId    String        @map("local_id")
+  entity     SyncEntity
+  operation  SyncOperation
+  processedAt DateTime     @default(now()) @map("processed_at")
+
+  @@unique([storeId, deviceId, localId])
+  @@index([storeId, processedAt])
+  @@map("sync_events")
+}
+
+enum SyncEntity {
+  sale
+  product
+  cash_movement
+}
+
+enum SyncOperation {
+  create
+  update
+  delete
+}
+
 // ============================================
 // Inventory
 // ============================================

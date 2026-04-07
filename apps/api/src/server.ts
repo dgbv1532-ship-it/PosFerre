@@ -18,6 +18,14 @@ const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+function ensureRequiredEnvVars() {
+  const requiredVars = ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
+  const missingVars = requiredVars.filter((name) => !process.env[name]);
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+}
+
 async function buildServer() {
   const fastify = Fastify({
     logger: {
@@ -102,6 +110,7 @@ async function buildServer() {
 
 async function start() {
   try {
+    ensureRequiredEnvVars();
     const server = await buildServer();
     await server.listen({ port: PORT, host: HOST });
     console.log(`\n🚀 API running at http://localhost:${PORT}`);

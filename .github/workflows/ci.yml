@@ -49,6 +49,9 @@ jobs:
       - name: Type check Web
         run: pnpm --filter web exec tsc --noEmit
 
+      - name: Lint Web
+        run: pnpm --filter web lint
+
       - name: Build Web
         run: pnpm --filter web build
         env:

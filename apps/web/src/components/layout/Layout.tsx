@@ -17,7 +17,6 @@ import { useAuthStore } from '@/store/auth';
 import { useOffline } from '@/hooks/useOffline';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import toast from 'react-hot-toast';
 
 interface LayoutProps {
   children: ReactNode;

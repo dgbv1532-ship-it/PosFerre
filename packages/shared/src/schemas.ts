@@ -40,7 +40,9 @@ export const createProductSchema = z.object({
 export const updateProductSchema = createProductSchema.partial();
 
 export const adjustStockSchema = z.object({
-  quantity: z.number().int(),
+  quantity: z.number().refine((value) => Number.isFinite(value) && value !== 0, {
+    message: 'La cantidad debe ser distinta de cero',
+  }),
   reason: z.string().max(200).optional(),
 });
 

@@ -104,7 +104,7 @@ export async function salesRoutes(fastify: FastifyInstance) {
     );
 
     // Load products and validate stock
-    const productIds = body.items.map((i) => i.productId);
+    const productIds = [...new Set(body.items.map((i) => i.productId))];
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, storeId: request.storeId, active: true },
     });
@@ -117,9 +117,15 @@ export async function salesRoutes(fastify: FastifyInstance) {
     }
 
     // Validate stock availability
+    const quantityByProduct = new Map<string, number>();
     for (const item of body.items) {
-      const product = products.find((p) => p.id === item.productId)!;
-      if (new Decimal(product.stock).lt(item.quantity)) {
+      const currentQuantity = quantityByProduct.get(item.productId) ?? 0;
+      quantityByProduct.set(item.productId, currentQuantity + item.quantity);
+    }
+
+    for (const [productId, requestedQuantity] of quantityByProduct.entries()) {
+      const product = products.find((p) => p.id === productId)!;
+      if (new Decimal(product.stock).lt(requestedQuantity)) {
         return reply.code(400).send({
           error: 'Bad Request',
           message: `Stock insuficiente para: ${product.name} (disponible: ${product.stock})`,
@@ -167,10 +173,10 @@ export async function salesRoutes(fastify: FastifyInstance) {
       });
 
       // Decrement stock for each product
-      for (const item of body.items) {
+      for (const [productId, quantity] of quantityByProduct.entries()) {
         await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
+          where: { id: productId },
+          data: { stock: { decrement: quantity } },
         });
       }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Tag, Key, Plus, Edit2, Power } from 'lucide-react';
+import { Users, Tag, Key, Plus, Power } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getApiError } from '@/lib/api';
 import { useCategories, useCreateCategory } from '@/hooks/useProducts';
