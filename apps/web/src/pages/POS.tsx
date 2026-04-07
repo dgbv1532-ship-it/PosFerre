@@ -31,7 +31,40 @@ const PAYMENT_METHODS = [
   { value: 'transfer' as const, label: 'Transfer', icon: ArrowLeftRight },
 ];
 
-const PY_DENOMINATIONS = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+function getRecommendedCashAmounts(total: number): number[] {
+  const safeTotal = Math.max(0, Math.ceil(total));
+  const steps =
+    safeTotal >= 100000
+      ? [10000, 20000, 50000, 100000]
+      : safeTotal >= 50000
+        ? [5000, 10000, 20000, 50000]
+        : safeTotal >= 20000
+          ? [2000, 5000, 10000, 20000]
+          : safeTotal >= 10000
+            ? [1000, 2000, 5000, 10000]
+            : [500, 1000, 2000, 5000];
+
+  const nextAbove = (value: number, step: number) => Math.ceil((value + 1) / step) * step;
+  const raw = [
+    nextAbove(safeTotal, steps[0]),
+    nextAbove(safeTotal, steps[1]),
+    nextAbove(safeTotal, steps[2]),
+    nextAbove(safeTotal, steps[3]),
+  ];
+
+  const unique: number[] = [];
+  for (const amount of raw) {
+    if (!unique.includes(amount)) unique.push(amount);
+  }
+
+  let cursor = unique[0] ?? nextAbove(safeTotal, steps[0]);
+  while (unique.length < 4) {
+    cursor += steps[0];
+    if (!unique.includes(cursor)) unique.push(cursor);
+  }
+
+  return unique.slice(0, 4);
+}
 
 export function POSPage() {
   const user = useAuthStore((state) => state.user);
@@ -478,7 +511,7 @@ function CheckoutModal({
     }
   }, [customerId]);
 
-  const quickAmounts = [...new Set([total, ...PY_DENOMINATIONS])].sort((a, b) => a - b);
+  const quickAmounts = getRecommendedCashAmounts(total);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedCustomerLabel = selectedCustomer?.name ?? selectedCustomerName;
   const normalizedCustomerSearch = customerSearch.trim().toLowerCase();
@@ -660,6 +693,12 @@ function CheckoutModal({
               autoFocus
             />
             <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => onSetAmountPaid(total)}
+                className="col-span-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-semibold"
+              >
+                Exacto: {formatCurrency(total)}
+              </button>
               {quickAmounts.map((amount) => (
                 <button
                   key={amount}
