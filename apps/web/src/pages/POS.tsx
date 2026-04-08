@@ -558,7 +558,7 @@ function CheckoutModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-6 shadow-xl">
+      <div className="relative w-full max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Cobrar</h2>
 
         <div className="bg-blue-50 rounded-xl p-4 mb-4 text-center">

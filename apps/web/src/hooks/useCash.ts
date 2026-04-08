@@ -4,44 +4,16 @@ import { formatCurrency } from '@/lib/utils';
 import type { CashRegister, CashMovement } from '@pos/shared';
 import { useAuthStore } from '@/store/auth';
 import { useOffline } from './useOffline';
+import { generateId } from '@/lib/utils';
+import {
+  buildLocalCashRegister,
+  clearOfflineRegister,
+  readCachedCurrentRegister,
+  readOfflineRegister,
+  writeCachedCurrentRegister,
+  writeOfflineRegister,
+} from '@/lib/offlineCash';
 import toast from 'react-hot-toast';
-
-const CURRENT_REGISTER_CACHE_KEY = 'ferretpos-current-register';
-
-interface CurrentRegisterCacheEntry {
-  storeId: string;
-  userId: string;
-  register: CashRegister;
-}
-
-function readCachedCurrentRegister(storeId?: string, userId?: string): CashRegister | null {
-  if (!storeId || !userId) return null;
-
-  const raw = localStorage.getItem(CURRENT_REGISTER_CACHE_KEY);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as CurrentRegisterCacheEntry;
-    if (parsed.storeId !== storeId || parsed.userId !== userId) return null;
-    return parsed.register ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedCurrentRegister(
-  register: CashRegister | null,
-  storeId?: string,
-  userId?: string,
-) {
-  if (!storeId || !userId || !register) {
-    localStorage.removeItem(CURRENT_REGISTER_CACHE_KEY);
-    return;
-  }
-
-  const entry: CurrentRegisterCacheEntry = { storeId, userId, register };
-  localStorage.setItem(CURRENT_REGISTER_CACHE_KEY, JSON.stringify(entry));
-}
 
 export function useCurrentRegister() {
   const { isOnline } = useOffline();
@@ -50,18 +22,29 @@ export function useCurrentRegister() {
   return useQuery<CashRegister | null>({
     queryKey: ['cash', 'current'],
     queryFn: async () => {
+      const offlineRegister = readOfflineRegister(user?.storeId, user?.id);
+      const localOffline =
+        offlineRegister && user
+          ? buildLocalCashRegister(offlineRegister, user.name)
+          : null;
+
       if (!isOnline) {
-        return readCachedCurrentRegister(user?.storeId, user?.id);
+        return localOffline ?? readCachedCurrentRegister(user?.storeId, user?.id);
       }
 
       try {
         const res = await api.get('/cash/current');
         const register = res.data.data as CashRegister | null;
         writeCachedCurrentRegister(register, user?.storeId, user?.id);
+        if (register) {
+          clearOfflineRegister();
+          return register;
+        }
+        if (localOffline) return localOffline;
         return register;
       } catch (error) {
         if (!navigator.onLine) {
-          return readCachedCurrentRegister(user?.storeId, user?.id);
+          return localOffline ?? readCachedCurrentRegister(user?.storeId, user?.id);
         }
 
         throw error;
@@ -99,13 +82,36 @@ export function useOpenCashRegister() {
   const user = useAuthStore((state) => state.user);
   return useMutation({
     mutationFn: async (data: { openingAmount: number; notes?: string }) => {
+      if (!navigator.onLine) {
+        if (!user?.storeId || !user.id) {
+          throw new Error('Sesion invalida. Vuelve a iniciar sesion.');
+        }
+
+        const offlineEntry = {
+          localId: `local-reg-${generateId()}`,
+          storeId: user.storeId,
+          userId: user.id,
+          openingAmount: data.openingAmount,
+          notes: data.notes ?? null,
+          openedAt: new Date().toISOString(),
+          pendingSync: true,
+        };
+
+        writeOfflineRegister(offlineEntry);
+        return buildLocalCashRegister(offlineEntry, user.name);
+      }
+
       const res = await api.post('/cash/open', data);
       return res.data.data as CashRegister;
     },
     onSuccess: (register) => {
       writeCachedCurrentRegister(register, user?.storeId, user?.id);
+      const isLocal = String(register.id).startsWith('local-reg-');
+      if (!isLocal) {
+        clearOfflineRegister();
+      }
       qc.invalidateQueries({ queryKey: ['cash'] });
-      toast.success('Caja abierta');
+      toast.success(isLocal ? 'Caja abierta offline — se sincronizara al reconectar' : 'Caja abierta');
     },
     onError: (err) => toast.error(getApiError(err)),
   });
@@ -116,6 +122,24 @@ export function useCloseCashRegister() {
   const user = useAuthStore((state) => state.user);
   return useMutation({
     mutationFn: async (data: { closingAmount: number; notes?: string }) => {
+      if (!navigator.onLine) {
+        const offlineEntry = readOfflineRegister(user?.storeId, user?.id);
+        if (offlineEntry) {
+          clearOfflineRegister();
+          writeCachedCurrentRegister(null, user?.storeId, user?.id);
+          return {
+            ...buildLocalCashRegister(offlineEntry, user?.name),
+            closedAt: new Date().toISOString(),
+            closingAmount: data.closingAmount,
+            expectedClosingAmount: data.closingAmount,
+            closingDifference: 0,
+            notes: data.notes ?? offlineEntry.notes,
+          } as CashRegister;
+        }
+
+        throw new Error('No se puede cerrar caja sin conexion en una caja sincronizada.');
+      }
+
       const res = await api.post('/cash/close', data);
       return res.data.data as CashRegister;
     },

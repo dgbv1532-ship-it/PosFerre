@@ -6,7 +6,14 @@ import {
   upsertProducts,
   upsertCategories,
 } from '@/db/local';
+import { useAuthStore } from '@/store/auth';
+import {
+  clearOfflineRegister,
+  readOfflineRegister,
+  writeCachedCurrentRegister,
+} from './offlineCash';
 import { generateId } from './utils';
+import axios from 'axios';
 
 let isSyncing = false;
 
@@ -22,6 +29,8 @@ export async function syncWithServer(): Promise<{
   isSyncing = true;
 
   try {
+    await ensureOfflineRegisterIsSynced();
+
     const pendingItems = await getPendingSyncItems();
 
     const deviceId = getOrCreateDeviceId();
@@ -81,6 +90,8 @@ export async function initialSync() {
   if (!navigator.onLine) return;
 
   try {
+    await ensureOfflineRegisterIsSynced();
+
     const [productsRes, categoriesRes] = await Promise.all([
       api.get('/products?limit=1000'),
       api.get('/categories'),
@@ -101,6 +112,44 @@ function getOrCreateDeviceId(): string {
     localStorage.setItem('deviceId', deviceId);
   }
   return deviceId;
+}
+
+async function ensureOfflineRegisterIsSynced() {
+  const user = useAuthStore.getState().user;
+  if (!user?.storeId || !user.id) return;
+
+  const offlineRegister = readOfflineRegister(user.storeId, user.id);
+  if (!offlineRegister?.pendingSync) return;
+
+  try {
+    const currentRes = await api.get('/cash/current');
+    const current = currentRes.data.data;
+    if (current) {
+      writeCachedCurrentRegister(current, user.storeId, user.id);
+      clearOfflineRegister();
+      return;
+    }
+
+    const openRes = await api.post('/cash/open', {
+      openingAmount: offlineRegister.openingAmount,
+      notes: offlineRegister.notes ?? undefined,
+    });
+    const opened = openRes.data.data;
+    writeCachedCurrentRegister(opened, user.storeId, user.id);
+    clearOfflineRegister();
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      const currentRes = await api.get('/cash/current');
+      const current = currentRes.data.data;
+      if (current) {
+        writeCachedCurrentRegister(current, user.storeId, user.id);
+        clearOfflineRegister();
+      }
+      return;
+    }
+
+    throw error;
+  }
 }
 
 // Listen for online event to auto-sync

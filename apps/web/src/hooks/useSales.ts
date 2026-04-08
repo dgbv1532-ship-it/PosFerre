@@ -32,6 +32,9 @@ export function useCreateSale() {
         const createdAt = new Date().toISOString();
         const payload = {
           ...data,
+          // Always sync offline sales without registerId.
+          // The server resolves the correct open register at sync time.
+          registerId: null,
           createdAt,
           items: data.items.map((item) => ({
             ...item,
