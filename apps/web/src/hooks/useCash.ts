@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { api, getApiError } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import type { CashRegister, CashMovement } from '@pos/shared';
@@ -82,7 +83,7 @@ export function useOpenCashRegister() {
   const user = useAuthStore((state) => state.user);
   return useMutation({
     mutationFn: async (data: { openingAmount: number; notes?: string }) => {
-      if (!navigator.onLine) {
+      const createOfflineRegister = () => {
         if (!user?.storeId || !user.id) {
           throw new Error('Sesion invalida. Vuelve a iniciar sesion.');
         }
@@ -99,10 +100,23 @@ export function useOpenCashRegister() {
 
         writeOfflineRegister(offlineEntry);
         return buildLocalCashRegister(offlineEntry, user.name);
+      };
+
+      if (!navigator.onLine) {
+        return createOfflineRegister();
       }
 
-      const res = await api.post('/cash/open', data);
-      return res.data.data as CashRegister;
+      try {
+        const res = await api.post('/cash/open', data);
+        return res.data.data as CashRegister;
+      } catch (error) {
+        // Some devices keep navigator.onLine=true while there is no internet access.
+        if (!axios.isAxiosError(error) || error.response) {
+          throw error;
+        }
+
+        return createOfflineRegister();
+      }
     },
     onSuccess: (register) => {
       writeCachedCurrentRegister(register, user?.storeId, user?.id);
